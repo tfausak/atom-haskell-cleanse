@@ -2,68 +2,95 @@ const api = require('atom');
 const path = require('path');
 const process = require('child_process');
 
-module.exports = {
-  subscriptions: null,
+const addErrorNotification = (stderr, stdout) => atom.notifications.addError(
+  'Haskell Cleanse',
+  { detail: stderr.concat(stdout).join(''), dismissable: true }
+);
 
-  activate() {
+const addWarningNotification = (stderr) => atom.notifications.addWarning(
+  'Haskell Cleanse',
+  { detail: stderr.join(''), dismissable: true }
+);
+
+const destroyMarkers = (editor) => editor
+  .findMarkers({ key: 'haskell-cleanse' })
+  .forEach((marker) => marker.destroy());
+
+const addMarker = (editor, hint) => {
+  const marker = editor.markBufferRange(
+    [
+      [hint.startLine - 1, hint.startColumn - 1],
+      [hint.endLine - 1, hint.endColumn - 1],
+    ],
+    { invalidate: 'touch', key: 'haskell-cleanse' }
+  );
+
+  editor.decorateMarker(
+    marker,
+    { class: 'haskell-cleanse-highlight', type: 'highlight' }
+  );
+
+  const item = document.createElement('div');
+  item.className = 'haskell-cleanse-block';
+  const conversion = hint.to ? ` (${hint.from} => ${hint.to})` : '';
+  item.textContent = `${hint.severity}: ${hint.hint}${conversion}`;
+  editor.decorateMarker(marker, { item, position: 'after', type: 'block' });
+};
+
+const addMarkers = (editor, hints) => hints
+  .forEach((hint) => addMarker(editor, hint));
+
+const callHlint = (editor, done) => {
+  const file = editor.getPath();
+  const hlint = process.spawn(
+    'stack',
+    ['exec', '--', 'hlint', 'lint', '--json', '--no-exit-code', '-'],
+    { cwd: file ? path.dirname(file) : null }
+  );
+
+  const stdout = [];
+  const stderr = [];
+  hlint.stdout.on('data', (chunk) => stdout.push(chunk));
+  hlint.stderr.on('data', (chunk) => stderr.push(chunk));
+
+  const stdin = editor.getText();
+  hlint.on('close', (status) => done({ status, stderr, stdin, stdout }));
+
+  hlint.stdin.write(stdin);
+  hlint.stdin.end();
+};
+
+module.exports = {
+  activate () {
     this.subscriptions = new api.CompositeDisposable();
-    this.subscriptions.add(atom.commands.add('atom-workspace',
-      { 'haskell-cleanse:lint': () => this.lint() }));
+    this.subscriptions.add(atom.commands.add(
+      'atom-workspace',
+      { 'haskell-cleanse:lint': () => this.lint() }
+    ));
   },
 
-  deactivate() {
+  deactivate () {
     this.subscriptions.dispose();
   },
 
-  lint() {
+  lint () {
     const editor = atom.workspace.getActiveTextEditor();
-    if (!editor) { return; }
+    if (editor) {
+      callHlint(editor, ({ status, stderr, stdout }) => {
+        if (status === 0) {
+          if (stderr.length !== 0) {
+            addWarningNotification(stderr);
+          }
 
-    const file = editor.getPath();
-    const directory = file ? path.dirname(file) : null;
-    const hlint = process.spawn('stack',
-      ['exec', '--', 'hlint', 'lint', '--json', '--no-exit-code', '-'],
-      { cwd: directory });
+          destroyMarkers(editor);
 
-    const stdout = [];
-    const stderr = [];
-    hlint.stdout.on('data', (chunk) => stdout.push(chunk));
-    hlint.stderr.on('data', (chunk) => stderr.push(chunk));
-
-    hlint.on('close', (status) => {
-      if (status !== 0) {
-        return atom.notifications.addError('Haskell Cleanse',
-          { detail: stderr.concat(stdout).join(''), dismissable: true });
-      }
-      if (stderr.length !== 0) {
-        atom.notifications.addWarning('Haskell Cleanse',
-          { detail: stderr.join(''), dismissable: true });
-      }
-
-      editor.findMarkers({ key: 'haskell-cleanse' })
-        .forEach((marker) => marker.destroy());
-
-      JSON.parse(stdout.join('')).forEach((hint) => {
-        const marker = editor.markBufferRange(
-          [
-            [hint.startLine - 1, hint.startColumn - 1],
-            [hint.endLine - 1, hint.endColumn - 1],
-          ],
-          { invalidate: 'touch', key: 'haskell-cleanse' });
-
-        editor.decorateMarker(marker,
-          { type: 'highlight', class: 'haskell-cleanse-highlight' });
-
-        const div = document.createElement('div');
-        div.className = 'haskell-cleanse-block';
-        div.textContent = `${hint.severity}: ${hint.hint}`
-          + (hint.to ? ` (${hint.from} => ${hint.to})` : '');
-        editor.decorateMarker(marker,
-          { type: 'block', position: 'after', item: div });
+          addMarkers(JSON.parse(stdout.join('')));
+        } else {
+          addErrorNotification(stderr, stdout);
+        }
       });
-    });
-
-    hlint.stdin.write(editor.getText());
-    hlint.stdin.end();
+    }
   },
+
+  subscriptions: null,
 };
