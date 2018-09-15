@@ -84,7 +84,7 @@ module.exports = {
 
           destroyMarkers(editor);
 
-          addMarkers(JSON.parse(stdout.join('')));
+          addMarkers(editor, JSON.parse(stdout.join('')));
         } else {
           addErrorNotification(stderr, stdout);
         }
