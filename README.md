@@ -1,2 +1,3 @@
-# atom-haskell-cleanse
-:sparkles: Lints Haskell code.
+# Cleanse
+
+Cleanse is an Atom package that lints Haskell code.
