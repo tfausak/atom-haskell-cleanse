@@ -1,0 +1,13 @@
+{
+  "name": "haskell-cleanse",
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "Lints Haskell code.",
+  "repository": "https://github.com/tfausak/atom-haskell-cleanse",
+  "engines": {
+    "atom": "^1.30.0"
+  },
+  "activationCommands": {
+    "atom-workspace": "haskell-cleanse:lint"
+  }
+}
