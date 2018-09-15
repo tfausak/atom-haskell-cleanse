@@ -1,0 +1,7 @@
+atom-text-editor .haskell-cleanse-highlight .region {
+  border-bottom: thin dashed orange;
+}
+
+atom-text-editor .haskell-cleanse-block {
+  color: orange;
+}
