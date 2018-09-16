@@ -2,18 +2,27 @@ const api = require('atom');
 const path = require('path');
 const process = require('child_process');
 
+const MARKER_KEY = 'haskell-cleanse';
+const NOTIFICATION_TITLE = 'Haskell Cleanse';
+const NOTIFICATION_DURATION = 1000;
+
+const addSuccessNotification = (detail) => atom.notifications.addSuccess(
+  NOTIFICATION_TITLE,
+  { detail, dismissable: true }
+);
+
 const addErrorNotification = (stderr, stdout) => atom.notifications.addError(
-  'Haskell Cleanse',
+  NOTIFICATION_TITLE,
   { detail: stderr.concat(stdout).join(''), dismissable: true }
 );
 
 const addWarningNotification = (stderr) => atom.notifications.addWarning(
-  'Haskell Cleanse',
+  NOTIFICATION_TITLE,
   { detail: stderr.join(''), dismissable: true }
 );
 
 const destroyMarkers = (editor) => editor
-  .findMarkers({ key: 'haskell-cleanse' })
+  .findMarkers({ key: MARKER_KEY })
   .forEach((marker) => marker.destroy());
 
 const addMarker = (editor, hint) => {
@@ -22,7 +31,7 @@ const addMarker = (editor, hint) => {
       [hint.startLine - 1, hint.startColumn - 1],
       [hint.endLine - 1, hint.endColumn - 1],
     ],
-    { invalidate: 'touch', key: 'haskell-cleanse' }
+    { invalidate: 'touch', key: MARKER_KEY }
   );
 
   editor.decorateMarker(
@@ -84,7 +93,13 @@ module.exports = {
 
           destroyMarkers(editor);
 
-          addMarkers(editor, JSON.parse(stdout.join('')));
+          const hints = JSON.parse(stdout.join(''));
+          if (hints.length === 0) {
+            const notification = addSuccessNotification('Already linted!');
+            setTimeout(() => notification.dismiss(), NOTIFICATION_DURATION);
+          } else {
+            addMarkers(editor, hints);
+          }
         } else {
           addErrorNotification(stderr, stdout);
         }
